@@ -77,14 +77,14 @@ def plot_curve(curve_x, curve_y, x_peaks=None, plot_type='scatter', xlabel=None,
     ax.set_title(title)
     if type(xlim) != type(None): ax.set_xlim(xlim)
     if type(ylim) != type(None): ax.set_xlim(ylim)
-    if save_path: plt.savefig(save_path, dpi=300, bbox_inches='tight')
-    
+    if yaxis_style == 'sci':
+        plt.ticklabel_format(axis='y', style='sci', scilimits=(0,0), useLocale=False)    
     if type(x_peaks) != type(None):
         for x in x_peaks:
             y = curve_y[np.where(curve_x==x)]
             pl.text(x, y, str(x), color="red", fontsize=6)
-    if yaxis_style == 'sci':
-        plt.ticklabel_format(axis='y', style='sci', scilimits=(0,0), useLocale=False)
+            
+    if save_path: plt.savefig(save_path, dpi=300, bbox_inches='tight')
     plt.show()
     
 
