@@ -142,7 +142,8 @@ def fit_exp(xs, ys, p_init, x_peaks=[], ylim=None, camera_freq=500, add_previous
 
 def fit_exp_function(xs, ys, camera_freq=500, 
                      fit_settings = {'fit_func': 'exp', 'I_diff': 5000, 'bounds':[0.01, 1], 'p_init':(1, 0.1),
-                                     'from_previous': False, 'weight_previous': False, 'relative_intensity': False}):
+                                     'from_previous': False, 'weight_previous': False, 'relative_intensity': False,
+                                     'use_prev_as_bound': False}):
     
     '''
     I_diff: Intensity difference used to normalize the curve to 0-1;
@@ -162,6 +163,7 @@ def fit_exp_function(xs, ys, camera_freq=500,
     from_previous = fit_settings['from_previous']
     weight_previous = fit_settings['weight_previous']
     relative_intensity = fit_settings['relative_intensity']
+    use_prev_as_bound = fit_settings['use_prev_as_bound']
     
     if not from_previous and weight_previous:
         print("Please assign an integer to from_previous, otherwise, can't assign weight for previous data point.")
@@ -172,24 +174,47 @@ def fit_exp_function(xs, ys, camera_freq=500,
 so the first several data points will not contribute to the fitting process.")
         
     a_list, b_list = [], []
-    labels, ys_fit, sign_list, I_start_list, I_end_list = [], [], [], [], []
+    ys_nor, ys_nor_fit, ys_fit = [], [], []
+    labels, I_drop_list = [], []
     
     for i in range(len(xs)):
+        
+        if i == 0:
+            I_drop = 0
+        else:
+            I_drop = (I_end-np.mean(ys[i][:len(ys[i])//200+3]))/I_end
+        
+        # section: normalize the curve
+        # add previous data point
+        if i != 0 and from_previous:
+            ys[i] = [I_end]*from_previous+ys[i]
+            xs[i] = xs[i][:from_previous]+xs[i]
+
+#             ys[i][:from_previous] = [I_end]*from_previous
+
+
         x = np.linspace(1e-5, 1, len(ys[i])) # use second as x axis unit
         n_avg = len(ys[i])//100+3
         
         
-        # section: normalize the curve
-        
-        # add previous data point
-        if i != 0 and from_previous:
-            ys[i][:from_previous] = [I_end]*from_previous
-            
-        I_start = np.mean(ys[i][:n_avg])
         I_end = np.mean(ys[i][-n_avg:])
+        if from_previous:
+            I_start = np.mean(ys[i][:from_previous])
+            if use_prev_as_bound: # choose smallest one as zero point so we can ignore out of range data points
+                if I_end > I_start:
+#                     print('upper:', [np.mean(ys[i][:n_avg]), I_start])
+                    I_start = np.min([np.mean(ys[i][:n_avg]), I_start])
+#                     print('I_start:', I_start)
+                else:
+#                     print('downward:', [np.mean(ys[i][:n_avg]), I_start])
+                    I_start = np.max([np.mean(ys[i][:n_avg]), I_start]) 
+#                     print('I_start:', I_start)
+        else:
+            I_start = np.mean(ys[i][:n_avg])
+    
 
+        # change the points from previous to be with relative intensity
         if relative_intensity:
-            # change the points from previous to be with relative intensity
             if from_previous and ((I_start < I_end and ys[i][0] > I_start) or (I_start > I_end and ys[i][0] < I_start)):
                 if I_diff:
                     I_delta = np.abs((ys[i][0]-I_start)) * I_diff/np.abs(I_end-I_start)
@@ -201,45 +226,93 @@ so the first several data points will not contribute to the fitting process.")
         
         # use I/I0, I0 is saturation intensity (last value) and scale to 0-1 based 
         if I_end - I_start == 0: # avoid devide by 0
-            ys[i] = (ys[i]-I_start)
+            y_nor = (ys[i]-I_start)
         elif I_diff: # use fixed I_diff
             if I_end < I_start:
-                ys[i] = (ys[i]-I_start)/(-I_diff)
+                y_nor = (ys[i]-I_start)/(-I_diff)
             else:
-                ys[i] = (ys[i]-I_start)/I_diff # I-Imin/Imax-Imin (I/I0)
+                y_nor = (ys[i]-I_start)/I_diff # I-Imin/Imax-Imin (I/I0)
 
                 
         # section: fit curve with function and collect data
         if fit_func == 'linear':
-            params, params_covariance = curve_fit(linear_func, x[-int(len(x)*0.9):], ys[i][-int(len(x)*0.9):], p0=p_init) 
+            params, params_covariance = curve_fit(linear_func, x[-int(len(x)*0.9):], y_nor[-int(len(x)*0.9):], p0=p_init) 
             a, b = params
-            y_fit = linear_func(x, a, b)
+            y_nor_fit = linear_func(x, a, b)
         
         elif fit_func == 'exp':
             # change weights for previous point
             if from_previous and weight_previous:
-                yerr = 1/ys[i]
-                yerr[:from_previous]*=weight_previous
-                params, params_covariance = curve_fit(exp_func, x, ys[i], p0=p_init, sigma=yerr, bounds=[0.01, 1], absolute_sigma=True) 
+#                 yerr = 1/y_nor
+#                 yerr[:from_previous]*=weight_previous
+                yerr = np.ones(len(y_nor))*0.1
+                yerr[int(len(y_nor)/5):]*=weight_previous
+                print(yerr)
+                
+                params, params_covariance = curve_fit(exp_func, x, y_nor, p0=p_init, sigma=yerr, bounds=bounds, absolute_sigma=False) 
             else:
-                params, params_covariance = curve_fit(exp_func, x, ys[i], p0=p_init, bounds=[0.01, 1], absolute_sigma=True) 
+                params, params_covariance = curve_fit(exp_func, x, y_nor, p0=p_init, bounds=bounds, absolute_sigma=False) 
             a, b = params
-            y_fit = exp_func(x, a, b)
-        
-        ys[i] = list(ys[i])
+            y_nor_fit = exp_func(x, a, b)
+
+            if use_prev_as_bound and np.mean(y_nor[:from_previous]) > 0:
+                if np.all(y_nor_fit < np.mean(y_nor[:from_previous])):
+                    print('Empty range for use_prev_as_bound=True!!!')
+                    print(y_nor_fit)
+                    print('Lower limit:', np.mean(y_nor[:from_previous]))
+                    return
+                x_bound = np.min(np.where(y_nor_fit > np.mean(y_nor[:from_previous])))
+                x = x[x_bound:]
+            
+                xs[i] = xs[i][x_bound:]
+                ys[i] = ys[i][x_bound:]
+
+                n_avg = len(ys[i])//100+3
+                I_start = np.mean(ys[i][:n_avg])
+                I_end = np.mean(ys[i][-n_avg:])
+                
+                # redo the normalization
+                # use I/I0, I0 is saturation intensity (last value) and scale to 0-1 based 
+                if I_end - I_start == 0:  # avoid devide by 0
+                    y_nor = (ys[i]-I_start)
+                elif I_diff:  # use fixed I_diff
+                    if I_end < I_start:
+                        y_nor = (ys[i]-I_start)/(-I_diff)
+                    else:
+                        y_nor = (ys[i]-I_start)/I_diff  # I-Imin/Imax-Imin (I/I0)
+                
+                # change weights for previous point
+                if from_previous and weight_previous:
+                    yerr = np.ones(len(y_nor))*0.1
+                    yerr[int(len(y_nor)/5):]*=weight_previous
+                    params, params_covariance = curve_fit(exp_func, x, y_nor, p0=p_init, sigma=yerr, bounds=bounds, absolute_sigma=False) 
+                else:
+                    params, params_covariance = curve_fit(exp_func, x, y_nor, p0=p_init, bounds=bounds, absolute_sigma=False) 
+                a, b = params
+                y_nor_fit = exp_func(x, a, b)
+
+            # reverse calculation for y_fit
+            if I_end - I_start == 0: # avoid devide by 0
+                y_fit = y_nor_fit+I_start
+            elif I_diff: # use fixed I_diff
+                if I_end < I_start:
+                    y_fit = y_nor_fit*(-I_diff)+I_start
+                else:
+                    y_fit = y_nor_fit*I_diff+I_start
+
         a_list.append(np.round(a, 4))
         b_list.append(np.round(b, 4))
-        
-        labels.append(f'index: {i+1};\nfitted: {np.round(a, 2)}*(1-exp(-t/{np.round(b, 2)});\nI_diff={I_diff})')
         ys_fit.append(y_fit)
-        I_start_list.append(np.round(I_start, 4))
-        I_end_list.append(np.round(I_end, 4))
+        ys_nor.append(y_nor)
+        ys_nor_fit.append(y_nor_fit)
+        labels.append(f'{np.round(a, 2)}*(1-exp(-t/{np.round(b, 2)}), I_drop: {np.round(I_drop, 2)}')
+        I_drop_list.append(I_drop)
 
-    return a_list, b_list, [labels, ys_fit, sign_list, I_start_list, I_end_list]
+    return a_list, b_list, [xs, ys, ys_fit, ys_nor, ys_nor_fit, labels, I_drop_list]
 
 
 
-def analyze_curves(h5_para_file, growth_dict, spot, metric, camera_freq=500, interval=1000, visualize=False, 
+def analyze_curves(h5_para_file, growth_dict, spot, metric, camera_freq=500, interval=1000, visualize=False,
                    fit_settings={'fit_func': 'exp', 'I_diff': 8000, 'bounds':[0.01, 1], 'p_init':(1, 0.1),
                                  'from_previous': 2, 'weight_previous': 1, 'relative_intensity': False}):
     '''
@@ -254,8 +327,10 @@ def analyze_curves(h5_para_file, growth_dict, spot, metric, camera_freq=500, int
     visualize=False;
     fit_settings: setting parameters for fitting function
     '''
+
+    a_list_all, b_list_all, x_list_all = [], [], []
+    xs_all, ys_all, ys_fit_all, ys_nor_all, ys_nor_fit_all, labels_all, I_drop_list_all = [], [], [], [], [], [], []
     
-    a_list_all, b_list_all, Imin_list_all, Imax_list_all, x_list_all = [], [], [], [], []
     x_end = 0
     for growth_name in list(growth_dict.keys()):
 
@@ -267,34 +342,107 @@ def analyze_curves(h5_para_file, growth_dict, spot, metric, camera_freq=500, int
                                        step_size=5, prominence=0.1)
         # fit exponential function
         a_list, b_list, info = fit_exp_function(xs, ys, camera_freq=500, fit_settings=fit_settings)        
-
-        labels, ys_fit, sign_list, I_start_list, I_end_list = info
         b_list_all+=b_list
         a_list_all+=a_list
         
+        xs, ys, ys_fit, ys_nor, ys_nor_fit, labels, I_drop_list = info
+        xs_all+=xs
+        ys_all+=ys
+        ys_fit_all+=ys_fit
+        ys_nor_all+=ys_nor
+        ys_nor_fit_all+=ys_nor_fit
+        labels_all += labels
+        I_drop_list_all += I_drop_list
+
         if x_list_all != []:
             x_list = x_peaks[:-1] + x_end
         else:
             x_list = x_peaks[:-1]
-                    
+
         if visualize:
             if x_list_all != []:
                 sample_x += x_end
                 x_peaks += x_end
 
-            plot_curve(sample_x, sample_y, x_peaks=x_peaks, plot_type='scatter', xlabel='Time (s)', ylabel='Intensity (a.u.)',
-                       figsize=(12, 4))            
+            labels_dict = {}
+            for i, x in enumerate(x_peaks[:-1]):
+                labels_dict[x] = labels[i]
+
+            plot_curve(np.concatenate(xs), np.concatenate(ys), curve_y_fit=np.concatenate(ys_fit), labels_dict=labels_dict,
+                       plot_type='scatter', xlabel='Time (s)', ylabel='Intensity (a.u.)', figsize=(12, 4))  
             plot_curve(x_list, b_list, plot_type='lineplot', xlabel='Laser ablation (count)', ylabel='Characteristic Time (s)', 
                        yaxis_style='linear', figsize=(12, 4))
             plot_curve(x_list, a_list, plot_type='lineplot', xlabel='Laser ablation (count)', ylabel='Intensity Magnitude (a.u.)', 
                        yaxis_style='linear', figsize=(12, 4))
+            show_grid_plots(xs, ys_nor, labels, ys_nor_fit, ylim=None)
             show_grid_plots(xs, ys, labels, ys_fit, ylim=None)
-        
         
         x_end = round(x_end + (len(sample_x)+interval)/camera_freq, 2)
         x_list_all.append(x_list)
         
     x_list_all = np.concatenate(x_list_all)[:len(b_list_all)]
     b_list_all = np.array(b_list_all)
+    return a_list_all, b_list_all, x_list_all, [xs_all, ys_all, ys_fit_all, ys_nor_all, ys_nor_fit_all, labels_all, I_drop_list_all]
+
+
+
+
+
+
+def normalize_0_1(y, I_start, I_end, I_diff):
+    # use I/I0, I0 is saturation intensity (last value) and scale to 0-1 based 
+    if I_end - I_start == 0: # avoid devide by 0
+        y_nor = (y-I_start)
+    elif I_diff: # use fixed I_diff
+        if I_end < I_start:
+            y_nor = (y-I_start)/(-I_diff)
+        else:
+            y_nor = (y-I_start)/I_diff # I-Imin/Imax-Imin (I/I0)
+    return y_nor
+
+def de_normalize_0_1(y_nor_fit, I_start, I_end, I_diff):
+    # reverse calculation for y_fit
+    if I_end - I_start == 0: # avoid devide by 0
+        y_fit = y_nor_fit+I_start
+    elif I_diff: # use fixed I_diff
+        if I_end < I_start:
+            y_fit = y_nor_fit*(-I_diff)+I_start
+        else:
+            y_fit = y_nor_fit*I_diff+I_start
+    return y_fit
+
+
+def process_rheed_data(xs, ys, I_diff, length=500, savgol_window_order=(15, 3), pca_component=10):
+#     print(len(xs[0]), len(ys[0]))
     
-    return a_list_all, b_list_all, x_list_all
+    # normalize data
+    ys_nor = []
+    for y in ys:
+        x = np.linspace(1e-5, 1, len(y)) # use second as x axis unit
+        n_avg = len(y)//100+3
+        I_end = np.mean(y[-n_avg:])
+        I_start = np.mean(y[:n_avg])
+        y_nor = normalize_0_1(y, I_start, I_end, I_diff)
+        ys_nor.append(y_nor)
+    
+#     print('1:', len(xs[0]), len(ys_nor[0]))
+    # interpolate the data to same size 
+    if length:
+        xs_sl = []
+        ys_nor_sl = []
+        for x, y_nor in zip(xs, ys_nor):
+            x_sl = np.linspace(np.min(x), np.max(x), length)
+#             print(len(x_sl), len(x), len(y_nor))
+            y_sl = np.interp(x_sl, x, y_nor)
+            xs_sl.append(x_sl)
+            ys_nor_sl.append(y_sl)
+    xs_sl, ys_nor_sl = np.array(xs_sl), np.array(ys_nor_sl)
+
+    # denoise
+    if savgol_window_order:
+        ys_nor_sl_denoised = savgol_filter(ys_nor_sl, savgol_window_order[0], savgol_window_order[1])
+    if pca_component:
+        pca = PCA(n_components=pca_component)
+        ys_nor_sl_denoised = pca.inverse_transform(pca.fit_transform(ys_nor_sl_denoised))
+    return xs_sl, ys_nor_sl_denoised
+

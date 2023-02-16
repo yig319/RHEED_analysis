@@ -60,19 +60,27 @@ def show_images(images, labels=None, img_per_row=8, img_height=1, colorbar=False
             index_hist = (i//img_per_row)*n+1, i%img_per_row
             h = axes[index_hist].hist(img.flatten(), bins=hist_bins)
     plt.show()
-    
-    
-    
-    
-def plot_curve(curve_x, curve_y, x_peaks=None, plot_type='scatter', xlabel=None, ylabel=None, 
+
+
+def find_nearest(array, value):
+    array = np.asarray(array)
+    idx = (np.abs(array - value)).argmin()
+    return array[idx]
+
+def plot_curve(curve_x, curve_y, curve_y_fit=None, labels_dict=None, plot_type='scatter', xlabel=None, ylabel=None, 
                xlim=None, ylim=None, yaxis_style='sci', title=None, figsize=(12,2.5), save_path=None):
     fig, ax = plt.subplots(1, 1, figsize=figsize)
     
     if plot_type == 'scatter':
         plt.scatter(x=curve_x, y=curve_y, c='k', s=1)
+        if type(curve_y_fit) != type(None):
+            plt.scatter(x=curve_x, y=curve_y_fit, c='r', s=0.5)
+
     if plot_type == 'lineplot':
         plt.plot(curve_x, curve_y, color='k', marker='.')
-        
+        if type(curve_y_fit) != type(None):
+            plt.plot(curve_x, curve_y_fit, color='b', marker='.')
+
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
     ax.set_title(title)
@@ -80,13 +88,14 @@ def plot_curve(curve_x, curve_y, x_peaks=None, plot_type='scatter', xlabel=None,
     if type(ylim) != type(None): ax.set_ylim(ylim)
     if yaxis_style == 'sci':
         plt.ticklabel_format(axis='y', style='sci', scilimits=(0,0), useLocale=False)    
-    if type(x_peaks) != type(None):
-        for x in x_peaks:
-            y = curve_y[np.where(curve_x==x)]
-            pl.text(x, y, str(round(x, 2)), color="red", fontsize=6)
+    if type(labels_dict) != type(None):
+        for x in labels_dict.keys():
+            y = curve_y[np.where(curve_x==find_nearest(curve_x, x))]
+            pl.text(x+0.2, y-2e3, str(labels_dict[x]), color="g", fontsize=6)
             
     if save_path: plt.savefig(save_path, dpi=300, bbox_inches='tight')
     plt.show()
+    
     
 
 def show_grid_plots(xs, ys, labels=None, ys_fit=None, img_per_row=4, subplot_height=3, ylim=None):
