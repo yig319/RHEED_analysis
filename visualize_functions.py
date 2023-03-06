@@ -61,25 +61,32 @@ def show_images(images, labels=None, img_per_row=8, img_height=1, colorbar=False
             h = axes[index_hist].hist(img.flatten(), bins=hist_bins)
     plt.show()
 
-
+    
+    
 def find_nearest(array, value):
     array = np.asarray(array)
     idx = (np.abs(array - value)).argmin()
     return array[idx]
 
-def plot_curve(curve_x, curve_y, curve_y_fit=None, labels_dict=None, plot_type='scatter', xlabel=None, ylabel=None, 
-               xlim=None, ylim=None, yaxis_style='sci', title=None, figsize=(12,2.5), save_path=None):
+def plot_curve(curve_x, curve_y, curve_x_fit=None, curve_y_fit=None, labels_dict=None, plot_type='scatter', xlabel=None, ylabel=None, 
+               xlim=None, ylim=None, yaxis_style='sci', title=None, legend=None, figsize=(12,2.5), save_path=None):
     fig, ax = plt.subplots(1, 1, figsize=figsize)
     
     if plot_type == 'scatter':
-        plt.scatter(x=curve_x, y=curve_y, c='k', s=1)
+        plt.scatter(x=curve_x, y=curve_y, c='k', s=5)
         if type(curve_y_fit) != type(None):
-            plt.scatter(x=curve_x, y=curve_y_fit, c='r', s=0.5)
+            if type(curve_x_fit) != type(None):
+                plt.scatter(x=curve_x_fit, y=curve_y_fit, c='r', s=5)
+            else:
+                plt.scatter(x=curve_x, y=curve_y_fit, c='r', s=5)
 
     if plot_type == 'lineplot':
         plt.plot(curve_x, curve_y, color='k', marker='.')
         if type(curve_y_fit) != type(None):
-            plt.plot(curve_x, curve_y_fit, color='b', marker='.')
+            if type(curve_x_fit) != type(None):
+                plt.plot(curve_x_fit, curve_y_fit, color='b', marker='.')
+            else:
+                plt.plot(curve_x, curve_y_fit, color='b', marker='.')
 
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
@@ -91,12 +98,11 @@ def plot_curve(curve_x, curve_y, curve_y_fit=None, labels_dict=None, plot_type='
     if type(labels_dict) != type(None):
         for x in labels_dict.keys():
             y = curve_y[np.where(curve_x==find_nearest(curve_x, x))]
-            pl.text(x+0.2, y-2e3, str(labels_dict[x]), color="g", fontsize=6)
+            pl.text(x, y, str(labels_dict[x]), color="g", fontsize=6)
             
     if save_path: plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    if legend: plt.legend(legend)
     plt.show()
-    
-    
 
 def show_grid_plots(xs, ys, labels=None, ys_fit=None, img_per_row=4, subplot_height=3, ylim=None):
 
@@ -125,6 +131,55 @@ def show_grid_plots(xs, ys, labels=None, ys_fit=None, img_per_row=4, subplot_hei
 
     fig.tight_layout()
     plt.show()
+    
+import torch
+import torch.nn as nn
+
+def visualize_predictions(x_all, y_all, all_outputs):
+    parameters_all, parameters_processed_all, x_coor_all, info = all_outputs
+    [xs_all, ys_all, xs_processed_all, ys_processed_all, ys_fit_all, ys_nor_all, ys_nor_fit_all, labels_all] = info
+    
+    x_coor_all = np.copy(x_coor_all)
+    parameters = np.copy(parameters_all)
+
+    # seperate RHEED data based on different function forms
+    ktop = parameters_processed_all[:,-2:]
+    x1_all, y1_all, x2_all, y2_all = [], [], [], []
+    for k, xx, yy in zip(ktop, xs_all, ys_all):
+        if k[0] == 0: 
+            x1_all.append(xx)
+            y1_all.append(yy)
+        if k[0] == 1: 
+            x2_all.append(xx)
+            y2_all.append(yy)
+    if x1_all != []: x1_all = np.concatenate(x1_all)
+    if y1_all != []: y1_all = np.concatenate(y1_all)
+    if x2_all != []: x2_all = np.concatenate(x2_all)
+    if y2_all != []: y2_all = np.concatenate(y2_all)
+
+    plot_curve(x_all, y_all, xlabel='Time (s)', ylabel='Intensity (a.u.)', figsize=(12,2.5), xlim=(-2, 135))
+
+    plot_curve(x1_all, y1_all, x2_all, y2_all, xlabel='Time (s)', ylabel='Intensity (a.u.)', figsize=(12,2.5), xlim=(-2, 135))
+
+    plot_curve(x_coor_all, parameters_processed_all[:,0], plot_type='lineplot', xlabel='Time (s)', ylabel='y1: a (a.u.)', 
+               yaxis_style='sci', figsize=(12, 4), xlim=(-2, 135))
+    plot_curve(x_coor_all, parameters_processed_all[:,1], plot_type='lineplot', xlabel='Time (s)', ylabel='y1: b*x (a.u.)', 
+               yaxis_style='sci', figsize=(12, 4), xlim=(-2, 135))
+    plot_curve(x_coor_all, parameters_processed_all[:,2], plot_type='lineplot', xlabel='Time (s)', ylabel='y1: c*x^2 (a.u.)', 
+               yaxis_style='sci', figsize=(12, 4), xlim=(-2, 135))
+
+    plot_curve(x_coor_all, parameters_processed_all[:,3], plot_type='lineplot', xlabel='Time (s)', ylabel='y2: m1 (a.u.)', 
+               yaxis_style='sci', figsize=(12, 4), xlim=(-2, 135))
+    plot_curve(x_coor_all, parameters_processed_all[:,4], plot_type='lineplot', xlabel='Time (s)', ylabel='y2: m2*x (a.u.)', 
+               yaxis_style='sci', figsize=(12, 4), xlim=(-2, 135))
+    plot_curve(x_coor_all, parameters_processed_all[:,5], plot_type='lineplot', xlabel='Time (s)', ylabel='y2: Characteristic Time (s)', 
+               yaxis_style='sci', figsize=(12, 4), xlim=(-2, 135))
+
+    print('MSE loss for DL model fitting is:', nn.MSELoss()(torch.tensor(np.concatenate(ys_nor_all, 0)), 
+                                                            torch.tensor(np.concatenate(ys_nor_fit_all, 0))).item())
+    
+    
+    
     
 def label_violinplot(ax, data, label_type='average', text_pos='center'):
     '''
