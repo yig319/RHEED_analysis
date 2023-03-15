@@ -2,7 +2,34 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pylab as pl
 import seaborn as sns
+from scipy.signal import savgol_filter
 
+    
+def plot_transparent_bg(tp, step, color, saturation=1, savgol_filter_level=(15,1), visualize=False, save_path=None):
+    tp_fs = np.hstack([np.linspace(start, stop, num=step+1, endpoint=True)[:-1] for start, stop in zip(tp, tp[1:])])
+    if type(savgol_filter_level) != type(None): 
+        tp_fs_before = np.copy(tp_fs)
+        tp_fs = savgol_filter(tp_fs, savgol_filter_level[0]*step+1, savgol_filter_level[1])
+        
+    tp_fs_norm = np.expand_dims((1-tp_fs / max(tp_fs)) * saturation, 1)
+    colors = np.repeat([[*color]], len(tp_fs_norm), 0)
+    colors_all = np.concatenate([colors, tp_fs_norm], 1)
+    
+    fig, ax = plt.subplots()
+    ax.plot(tp_fs_before)
+    ax.plot(tp_fs)
+    ax.imshow([colors_all], aspect='auto')
+    ax.axis('off')
+    plt.title('Visualization')
+    plt.show()
+    
+    if save_path: 
+        fig, ax = plt.subplots()
+        ax.imshow([colors_all], aspect='auto')
+        ax.axis('off')
+        plt.savefig(save_path)
+        plt.title('Saved Figure')
+        plt.show()
     
 def trim_axes(axs, N):
     """
@@ -68,25 +95,24 @@ def find_nearest(array, value):
     idx = (np.abs(array - value)).argmin()
     return array[idx]
 
-def plot_curve(curve_x, curve_y, curve_x_fit=None, curve_y_fit=None, labels_dict=None, plot_type='scatter', xlabel=None, ylabel=None, 
-               xlim=None, ylim=None, yaxis_style='sci', title=None, legend=None, figsize=(12,2.5), save_path=None):
+def plot_curve(curve_x, curve_y, curve_x_fit=None, curve_y_fit=None, labels_dict=None, plot_type='scatter', markersize=1, xlabel=None, ylabel=None, xlim=None, ylim=None,  yaxis_style='sci', title=None, legend=None, figsize=(12,2.5), save_path=None):
     fig, ax = plt.subplots(1, 1, figsize=figsize)
     
     if plot_type == 'scatter':
-        plt.scatter(x=curve_x, y=curve_y, c='k', s=5)
+        plt.scatter(x=curve_x, y=curve_y, c='k', s=markersize)
         if type(curve_y_fit) != type(None):
             if type(curve_x_fit) != type(None):
-                plt.scatter(x=curve_x_fit, y=curve_y_fit, c='r', s=5)
+                plt.scatter(x=curve_x_fit, y=curve_y_fit, c='r', s=markersize)
             else:
-                plt.scatter(x=curve_x, y=curve_y_fit, c='r', s=5)
+                plt.scatter(x=curve_x, y=curve_y_fit, c='r', s=markersize)
 
     if plot_type == 'lineplot':
-        plt.plot(curve_x, curve_y, color='k', marker='.')
+        plt.plot(curve_x, curve_y, color='k', marker='.', markersize=markersize)
         if type(curve_y_fit) != type(None):
             if type(curve_x_fit) != type(None):
-                plt.plot(curve_x_fit, curve_y_fit, color='b', marker='.')
+                plt.plot(curve_x_fit, curve_y_fit, color='b', marker='.', markersize=markersize)
             else:
-                plt.plot(curve_x, curve_y_fit, color='b', marker='.')
+                plt.plot(curve_x, curve_y_fit, color='b', marker='.', markersize=markersize)
 
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)

@@ -5,7 +5,6 @@ from scipy.optimize import curve_fit
 from scipy.stats import zscore
 from scipy.signal import savgol_filter
 from sklearn.decomposition import PCA
-import torch
 
 import sys
 sys.path.append('./')
@@ -286,4 +285,6 @@ def analyze_curves(h5_para_file, growth_dict, spot, metric, camera_freq=500, int
 
     parameters_all = np.concatenate(parameters_all, 0)
     x_list_all = np.concatenate(x_list_all)[:len(parameters_all)]
+    xs_all = np.concatenate(xs_all)
+    ys_all = np.concatenate(ys_all)
     return parameters_all, x_list_all, [xs_all, ys_all, ys_fit_all, ys_nor_all, ys_nor_fit_all, labels_all, np.array(losses_all)]
