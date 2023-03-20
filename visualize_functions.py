@@ -5,32 +5,29 @@ import seaborn as sns
 from scipy.signal import savgol_filter
 
     
-def plot_transparent_bg(tp, step, color, saturation=1, savgol_filter_level=(15,1), visualize=False, save_path=None):
-    tp_fs = np.hstack([np.linspace(start, stop, num=step+1, endpoint=True)[:-1] for start, stop in zip(tp, tp[1:])])
-    if type(savgol_filter_level) != type(None): 
-        tp_fs_before = np.copy(tp_fs)
-        tp_fs = savgol_filter(tp_fs, savgol_filter_level[0]*step+1, savgol_filter_level[1])
-        
-    tp_fs_norm = np.expand_dims((1-tp_fs / max(tp_fs)) * saturation, 1)
-    colors = np.repeat([[*color]], len(tp_fs_norm), 0)
-    colors_all = np.concatenate([colors, tp_fs_norm], 1)
+def make_fine_step(x, transparency, step, color, saturation=1, savgol_filter_level=(15,1)):
+    x_FineStep = np.hstack([np.linspace(start, stop, num=step+1, endpoint=True)[:-1] for start, stop in zip(x, x[1:])])
     
-    fig, ax = plt.subplots()
-    ax.plot(tp_fs_before)
-    ax.plot(tp_fs)
-    ax.imshow([colors_all], aspect='auto')
-    ax.axis('off')
-    plt.title('Visualization')
-    plt.show()
+    transparency_FineStep = np.hstack([np.linspace(start, stop, num=step+1, endpoint=True)[:-1] for start, stop in zip(transparency, transparency[1:])])
+    if not isinstance(savgol_filter_level, type(None)):
+        transparency_FineStep_before = np.copy(transparency_FineStep)
+        transparency_FineStep = savgol_filter(transparency_FineStep, savgol_filter_level[0]*step+1, savgol_filter_level[1])
+
+    transparency_FineStep_norm = np.expand_dims((transparency_FineStep / max(transparency_FineStep)) * saturation, 1)
+    transparency_FineStep_norm[transparency_FineStep_norm<0] = 0
     
-    if save_path: 
-        fig, ax = plt.subplots()
-        ax.imshow([colors_all], aspect='auto')
-        ax.axis('off')
-        plt.savefig(save_path)
-        plt.title('Saved Figure')
-        plt.show()
-    
+    colors = np.repeat([[*color]], len(transparency_FineStep_norm), 0)
+    colors_all = np.concatenate([colors, transparency_FineStep_norm], 1)
+    return x_FineStep, colors_all
+#     return x_FineStep, colors_all, transparency_FineStep_before, transparency_FineStep
+
+
+def two_color_array(x_all, x1, x2, c1, c2, transparency=1):
+    color_array = np.zeros([len(x_all), 4], dtype=np.float32)
+    color_array[np.isin(x_all, x1)] = [*c1, transparency]
+    color_array[np.isin(x_all, x2)] = [*c2, transparency]
+    return color_array
+
 def trim_axes(axs, N):
     """
     Reduce *axs* to *N* Axes. All further Axes are removed from the figure.
@@ -89,14 +86,31 @@ def show_images(images, labels=None, img_per_row=8, img_height=1, colorbar=False
     plt.show()
 
     
-    
 def find_nearest(array, value):
     array = np.asarray(array)
     idx = (np.abs(array - value)).argmin()
     return array[idx]
 
-def plot_curve(curve_x, curve_y, curve_x_fit=None, curve_y_fit=None, labels_dict=None, plot_type='scatter', markersize=1, xlabel=None, ylabel=None, xlim=None, ylim=None,  yaxis_style='sci', title=None, legend=None, figsize=(12,2.5), save_path=None):
+
+def plot_curve(curve_x, curve_y, curve_x_fit=None, curve_y_fit=None, labels_dict=None, bg_colors=None, plot_type='scatter', markersize=1, xlabel=None, ylabel=None, xlim=None, ylim=None, logscale=False, yaxis_style='sci', title=None, legend=None, figsize=(12,2.5), save_path=None):
+    
     fig, ax = plt.subplots(1, 1, figsize=figsize)
+    
+    if type(bg_colors) != type(None):
+        x_coor = bg_colors[:,0]
+        colors = bg_colors[:,1:]
+
+        for i in range(len(x_coor)):
+            if i == 0: 
+                end = (x_coor[i] + x_coor[i+1]) / 2
+                start = end - (x_coor[i+1] - x_coor[i])
+            elif i == len(x_coor) - 1: 
+                start = (x_coor[i-1] + x_coor[i]) / 2
+                end = start + (x_coor[i] - x_coor[i-1])
+            else:
+                start = (x_coor[i-1] + x_coor[i]) / 2
+                end = (x_coor[i] + x_coor[i+1]) / 2
+            ax.axvspan(start, end, facecolor=colors[i])
     
     if plot_type == 'scatter':
         plt.scatter(x=curve_x, y=curve_y, c='k', s=markersize)
@@ -126,11 +140,13 @@ def plot_curve(curve_x, curve_y, curve_x_fit=None, curve_y_fit=None, labels_dict
             y = curve_y[np.where(curve_x==find_nearest(curve_x, x))]
             pl.text(x, y, str(labels_dict[x]), color="g", fontsize=6)
             
-    if save_path: plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    if logscale: plt.yscale("log") 
     if legend: plt.legend(legend)
+    if save_path: plt.savefig(save_path, dpi=300, bbox_inches='tight')
     plt.show()
+    
 
-def show_grid_plots(xs, ys, labels=None, ys_fit=None, img_per_row=4, subplot_height=3, ylim=None):
+def show_grid_plots(xs, ys, labels=None, ys_fit1=None, ys_fit2=None, img_per_row=4, subplot_height=3, ylim=None, legend=None):
 
     if type(labels) == type(None): labels = range(len(ys))
 
@@ -144,19 +160,27 @@ def show_grid_plots(xs, ys, labels=None, ys_fit=None, img_per_row=4, subplot_hei
             index = i%img_per_row
         else:
             index = (i//img_per_row), i%img_per_row
-
+        
+        im = axes[index].plot(xs[i], ys[i], marker='.', markersize=8, color=(44/255,123/255,182/255, 0.5))
         axes[index].title.set_text(labels[i])
-        
-        im = axes[index].plot(xs[i], ys[i], marker='.')
-        
-        if type(ys_fit) != type(None):
-            im = axes[index].plot(xs[i], ys_fit[i])
-        
+
+        if type(ys_fit1) != type(None):
+            im = axes[index].plot(xs[i], ys_fit1[i], linewidth=4, color=(217/255,95/255,2/255))
+            
+        if type(ys_fit2) != type(None):
+            im = axes[index].plot(xs[i], ys_fit2[i], linewidth=2, color=(27/255,158/255,119/255))
+            
+            # green: (27/255,158/255,119/255), purple: (117/255,112/255,179/255)
+            
         if type(ylim) != type(None):
             axes[index].set_ylim([ylim[0], ylim[1]])
+            
+        if type(legend) != type(None): axes[index].legend(legend)
 
     fig.tight_layout()
     plt.show()
+    
+    
     
 import torch
 import torch.nn as nn

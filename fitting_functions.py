@@ -123,14 +123,20 @@ def process_rheed_data(xs, ys, length=500, savgol_window_order=(15, 3), pca_comp
     return xs_processed, ys_processed
 
 
-def fit_exp_function(xs, ys, fit_settings = {'I_diff': 5000, 'unify': True, 'bounds':[0.01, 1], 'p_init':(1, 0.1)}):
+def fit_exp_function(xs, ys, growth_name, fit_settings = {'I_diff': 5000, 'unify': True, 'bounds':[0.01, 1], 'p_init':[0.1, 0.4, 0.1]}):
     '''
     I_diff: Intensity difference used to normalize the curve to 0-1;
     
     '''
+    # use simplified version to avoid overfitting to wrong fitting function
+    def exp_func_inc_simp(x, b1, relax1):
+        return b1*(1 - np.exp(-x/relax1))
+    def exp_func_dec_simp(x, b2, relax2):
+        return b2*np.exp(-x/relax2)
+    
+    # real function to show
     def exp_func_inc(x, a1, b1, relax1):
         return (a1*x+b1)*(1 - np.exp(-x/relax1))
-    
     def exp_func_dec(x, a2, b2, relax2):
         return (a2*x+b2)*np.exp(-x/relax2)
   
@@ -141,7 +147,7 @@ def fit_exp_function(xs, ys, fit_settings = {'I_diff': 5000, 'unify': True, 'bou
     unify = fit_settings['unify']
 
     parameters = []
-    ys_nor, ys_nor_fit, ys_fit = [], [], []
+    ys_nor, ys_nor_fit, ys_nor_fit_failed, ys_fit = [], [], [], []
     labels, losses = [], []
     
     for i in range(len(xs)):
@@ -157,12 +163,25 @@ def fit_exp_function(xs, ys, fit_settings = {'I_diff': 5000, 'unify': True, 'bou
             params, params_covariance = curve_fit(exp_func_inc, x, y_nor, p0=p_init, bounds=bounds, absolute_sigma=False) 
             a, b, relax = params
             y_nor_fit = exp_func_inc(x, a, b, relax)
-            labels.append(f'index {i+1}:\ny=({np.round(a, 2)}t+{np.round(b, 2)})*(1-exp(-t/{np.round(relax, 2)}))')
+            labels.append(f'{growth_name}-index {i+1}:\ny=({np.round(a, 2)}t+{np.round(b, 2)})*(1-exp(-t/{np.round(relax, 2)}))')
             parameters.append((a, b, relax))
             losses.append((0, 0))
 
             
         else:
+            # determine fitting function with simplified functions
+            params, params_covariance = curve_fit(exp_func_inc_simp, x, y_nor, p0=p_init[1:], bounds=bounds, absolute_sigma=False) 
+            b1, relax1 = params
+            y1_nor_fit = exp_func_inc_simp(x, b1, relax1)
+
+            params, params_covariance = curve_fit(exp_func_dec_simp, x, y_nor, p0=p_init[1:], bounds=bounds, absolute_sigma=False) 
+            b2, relax2 = params
+            y2_nor_fit = exp_func_dec_simp(x, b2, relax2)
+
+            loss1 = ((y_nor - y1_nor_fit)**2).mean()
+            loss2 = ((y_nor - y2_nor_fit)**2).mean()
+
+            # calculate the real fitting parameters
             params, params_covariance = curve_fit(exp_func_inc, x, y_nor, p0=p_init, bounds=bounds, absolute_sigma=False) 
             a1, b1, relax1 = params
             y1_nor_fit = exp_func_inc(x, a1, b1, relax1)
@@ -170,20 +189,21 @@ def fit_exp_function(xs, ys, fit_settings = {'I_diff': 5000, 'unify': True, 'bou
             params, params_covariance = curve_fit(exp_func_dec, x, y_nor, p0=p_init, bounds=bounds, absolute_sigma=False) 
             a2, b2, relax2 = params
             y2_nor_fit = exp_func_dec(x, a2, b2, relax2)
-
-            loss1 = ((y_nor - y1_nor_fit)**2).mean()
-            loss2 = ((y_nor - y2_nor_fit)**2).mean()
-
+            
             if loss1 < loss2:
                 y_nor_fit = y1_nor_fit
-                labels.append(f'index {i+1}:\ny1=({np.round(a1, 2)}t+{np.round(b1, 2)})*(1-exp(-t/{np.round(relax1, 2)}))')
+                labels.append(f'{growth_name}-index {i+1}:\ny1=({np.round(a1, 2)}t+{np.round(b1, 2)})*(1-exp(-t/{np.round(relax1, 2)}))')
                 parameters.append((a1, b1, relax1))
+                
+                y_nor_fit_failed = y2_nor_fit
+
                 
             else:
                 y_nor_fit = y2_nor_fit
-                labels.append(f'index {i+1}:\ny2=({np.round(a2, 2)}t+{np.round(b2, 2)})*(exp(-t/{np.round(relax2, 2)}))')
+                labels.append(f'{growth_name}-index {i+1}:\ny2=({np.round(a2, 2)}t+{np.round(b2, 2)})*(exp(-t/{np.round(relax2, 2)}))')
                 parameters.append((a2, b2, relax2))
-                
+                y_nor_fit_failed = y1_nor_fit
+
             losses.append((loss1, loss2))
 
 #         y_nor_fit = y1_nor_fit
@@ -192,7 +212,8 @@ def fit_exp_function(xs, ys, fit_settings = {'I_diff': 5000, 'unify': True, 'bou
         ys_fit.append(y_fit)
         ys_nor.append(y_nor)
         ys_nor_fit.append(y_nor_fit)
-    return np.array(parameters), [xs, ys, ys_fit, ys_nor, ys_nor_fit, labels, losses]
+        ys_nor_fit_failed.append(y_nor_fit_failed)
+    return np.array(parameters), [xs, ys, ys_fit, ys_nor, ys_nor_fit, ys_nor_fit_failed, labels, losses]
 
 
 def analyze_curves(h5_para_file, growth_dict, spot, metric, camera_freq=500, interval=1000, visualize=False, fit_settings={'savgol_window_order': (15,3), 'pca_component': 10, 'I_diff': 8000, 'unify':True, 'bounds':[0.01, 1], 'p_init':(1, 0.1)}):
@@ -217,7 +238,8 @@ def analyze_curves(h5_para_file, growth_dict, spot, metric, camera_freq=500, int
     '''
 
     parameters_all, x_list_all = [], []
-    xs_all, ys_all, ys_fit_all, ys_nor_all, ys_nor_fit_all, labels_all, losses_all = [], [], [], [], [], [], []
+    xs_all, ys_all, ys_fit_all, ys_nor_all, ys_nor_fit_all, ys_nor_fit_failed_all = [], [], [], [], [], []
+    labels_all, losses_all =  [], []
     
     x_end = 0
     for growth_name in list(growth_dict.keys()):
@@ -231,25 +253,19 @@ def analyze_curves(h5_para_file, growth_dict, spot, metric, camera_freq=500, int
         
         xs, ys = process_rheed_data(xs, ys, length=500, savgol_window_order=fit_settings['savgol_window_order'], pca_component=fit_settings['pca_component'])        
 
-        
         # fit exponential function
-        parameters, info = fit_exp_function(xs, ys, fit_settings=fit_settings)        
+        parameters, info = fit_exp_function(xs, ys, growth_name, fit_settings=fit_settings)        
         parameters_all.append(parameters)
-        xs, ys, ys_fit, ys_nor, ys_nor_fit, labels, losses = info
+        xs, ys, ys_fit, ys_nor, ys_nor_fit, ys_nor_fit_failed, labels, losses = info
         xs_all.append(xs)
         ys_all.append(ys)
-#         xs_all+=xs
-#         ys_all+=ys
         ys_fit_all+=ys_fit
         ys_nor_all+=ys_nor
         ys_nor_fit_all+=ys_nor_fit
+        ys_nor_fit_failed_all+=ys_nor_fit_failed
         labels_all += labels
         losses_all += losses
 
-#         x_list = np.copy(x_peaks[:-1])
-#         if x_list_all == []: # first growth 
-#             x_list = x_peaks[:-1]
-#         else:
         x_list = x_peaks[:-1] + x_end
         x_end = round(x_end + (len(sample_x)+interval)/camera_freq, 2)
         x_list_all.append(x_list)
@@ -287,4 +303,9 @@ def analyze_curves(h5_para_file, growth_dict, spot, metric, camera_freq=500, int
     x_list_all = np.concatenate(x_list_all)[:len(parameters_all)]
     xs_all = np.concatenate(xs_all)
     ys_all = np.concatenate(ys_all)
-    return parameters_all, x_list_all, [xs_all, ys_all, ys_fit_all, ys_nor_all, ys_nor_fit_all, labels_all, np.array(losses_all)]
+    ys_nor_all = np.array(ys_nor_all)
+    ys_nor_fit_all = np.array(ys_nor_fit_all)
+    losses_all = np.array(losses_all)
+    ys_nor_fit_all_failed = np.array(ys_nor_fit_failed_all)
+    
+    return parameters_all, x_list_all, [xs_all, ys_all, ys_fit_all, ys_nor_all, ys_nor_fit_all, ys_nor_fit_all_failed, labels_all, losses_all]
