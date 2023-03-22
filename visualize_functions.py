@@ -92,7 +92,7 @@ def find_nearest(array, value):
     return array[idx]
 
 
-def plot_curve(curve_x, curve_y, curve_x_fit=None, curve_y_fit=None, labels_dict=None, bg_colors=None, plot_type='scatter', markersize=1, xlabel=None, ylabel=None, xlim=None, ylim=None, logscale=False, yaxis_style='sci', title=None, legend=None, figsize=(12,2.5), save_path=None):
+def plot_curve(curve_x, curve_y, curve_x_fit=None, curve_y_fit=None, labels_dict=None, bg_colors=None, boxes=None, box_color=None,  plot_type='scatter', markersize=1, xlabel=None, ylabel=None, xlim=None, ylim=None, logscale=False, yaxis_style='sci', title=None, legend=None, figsize=(12,2.5), save_path=None):
     
     fig, ax = plt.subplots(1, 1, figsize=figsize)
     
@@ -111,6 +111,10 @@ def plot_curve(curve_x, curve_y, curve_x_fit=None, curve_y_fit=None, labels_dict
                 start = (x_coor[i-1] + x_coor[i]) / 2
                 end = (x_coor[i] + x_coor[i+1]) / 2
             ax.axvspan(start, end, facecolor=colors[i])
+    if not isinstance(boxes,  type(None)):
+        for (box_start, box_end) in boxes:
+            ax.axvspan(box_start, box_end, facecolor=box_color, edgecolor=box_color)
+    
     
     if plot_type == 'scatter':
         plt.scatter(x=curve_x, y=curve_y, c='k', s=markersize)
@@ -144,6 +148,7 @@ def plot_curve(curve_x, curve_y, curve_x_fit=None, curve_y_fit=None, labels_dict
     if legend: plt.legend(legend)
     if save_path: plt.savefig(save_path, dpi=300, bbox_inches='tight')
     plt.show()
+    
     
 
 def show_grid_plots(xs, ys, labels=None, ys_fit1=None, ys_fit2=None, img_per_row=4, subplot_height=3, ylim=None, legend=None):
