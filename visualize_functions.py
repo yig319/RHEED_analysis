@@ -86,20 +86,97 @@ def show_images(images, labels=None, img_per_row=8, img_height=1, colorbar=False
     plt.show()
 
     
+# def find_nearest(array, value):
+#     array = np.asarray(array)
+#     idx = (np.abs(array - value)).argmin()
+#     return array[idx]
+
+def draw_background_colors(ax, bg_colors):
+    if isinstance(bg_colors, tuple):
+        ax.set_facecolor(bg_colors)
+    elif bg_colors is not None:
+        x_coor = bg_colors[:, 0]
+        colors = bg_colors[:, 1:]
+        for i in range(len(x_coor)):
+            if i == 0:
+                end = (x_coor[i] + x_coor[i+1]) / 2
+                start = end - (x_coor[i+1] - x_coor[i])
+            elif i == len(x_coor) - 1:
+                start = (x_coor[i-1] + x_coor[i]) / 2
+                end = start + (x_coor[i] - x_coor[i-1])
+            else:
+                start = (x_coor[i-1] + x_coor[i]) / 2
+                end = (x_coor[i] + x_coor[i+1]) / 2
+            ax.axvspan(start, end, facecolor=colors[i])
+            
+def draw_boxes(ax, boxes, box_color):
+    for (box_start, box_end) in boxes:
+        ax.axvspan(box_start, box_end, facecolor=box_color, edgecolor=box_color)
+
 def find_nearest(array, value):
-    array = np.asarray(array)
-    idx = (np.abs(array - value)).argmin()
+    idx = np.abs(array - value).argmin()
     return array[idx]
 
+def plot_scatter(ax, curve_x, curve_y, color='k', markersize=1):
+    ax.scatter(x=curve_x, y=curve_y, c=color, s=markersize)
 
-# def plot_curve(curve_x, curve_y, curve_x_fit=None, curve_y_fit=None, labels_dict=None, bg_colors=None, boxes=None, box_color=None,  plot_type='scatter', markersize=1, xlabel=None, ylabel=None, xlim=None, ylim=None, logscale=False, yaxis_style='sci', title=None, legend=None, figsize=(12,2.5), save_path=None):
+def plot_lineplot(ax, curve_x, curve_y, color='k', markersize=1):
+    ax.plot(curve_x, curve_y, color=color, marker='.', markersize=markersize)
+
+def set_labels(ax, xlabel=None, ylabel=None, title=None, xlim=None, ylim=None, yaxis_style='sci', 
+               logscale=False, legend=None):
+    if type(xlabel) != type(None): ax.set_xlabel(xlabel)
+    if type(xlim) != type(None): ax.set_ylabel(ylabel)
+    if type(title) != type(None): ax.set_title(title)
+    if type(xlim) != type(None): ax.set_xlim(xlim)
+    if type(ylim) != type(None): ax.set_ylim(ylim)
+    if yaxis_style == 'sci':
+        plt.ticklabel_format(axis='y', style='sci', scilimits=(0,0), useLocale=False)    
+    if logscale: plt.yscale("log") 
+    if legend: plt.legend(legend)
+
+def label_curves(ax, curve_x, curve_y, labels_dict):
+    if type(labels_dict) != type(None):
+        for x in labels_dict.keys():
+            y = curve_y[np.where(curve_x==find_nearest(curve_x, x))]
+            pl.text(x, y, str(labels_dict[x]), color="g", fontsize=6)
+            
+            
+def plot_curve(curve_x, curve_y, curve_x_fit=None, curve_y_fit=None, plot_colors=['k', 'r'], plot_type='scatter', markersize=1, xlabel=None, ylabel=None, xlim=None, ylim=None, logscale=False, yaxis_style='sci', title=None, legend=None, figsize=(12,2.5), save_path=None):
+    
+    fig, ax = plt.subplots(1, 1, figsize=figsize)
+    
+    if plot_type == 'scatter':
+        plot_scatter(ax, curve_x, curve_y, plot_colors[0], markersize)
+        if not isinstance(curve_y_fit, type(None)):
+            if not isinstance(curve_x_fit, type(None)):
+                plot_scatter(ax, curve_x_fit, curve_y_fit, plot_colors[1], markersize)
+            else:
+                plot_scatter(ax, curve_x, curve_y_fit, plot_colors[1], markersize)
+                
+    if plot_type == 'lineplot':
+        plot_lineplot(ax, curve_x, curve_y, plot_colors[0], markersize)
+        if not isinstance(curve_y_fit, type(None)):
+            if not isinstance(curve_x_fit, type(None)):
+                plot_lineplot(ax, curve_x_fit, curve_y_fit, plot_colors[1], markersize)
+            else:
+                plot_lineplot(ax, curve_x, curve_y_fit, plot_colors[1], markersize)
+                
+    set_labels(ax, xlabel=xlabel, ylabel=ylabel, title=title, xlim=xlim, ylim=ylim, yaxis_style=yaxis_style, 
+               logscale=logscale, legend=legend)
+    if save_path: plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    plt.show()
+    
+    
+# def plot_curve(curve_x, curve_y, curve_x_fit=None, curve_y_fit=None, plot_colors=['k', 'r'], labels_dict=None, bg_colors=None, boxes=None, box_color=None, plot_type='scatter', markersize=1, xlabel=None, ylabel=None, xlim=None, ylim=None, logscale=False, yaxis_style='sci', title=None, legend=None, figsize=(12,2.5), save_path=None):
     
 #     fig, ax = plt.subplots(1, 1, figsize=figsize)
     
-#     if type(bg_colors) != type(None):
+#     if isinstance(bg_colors,  tuple):
+#         ax.set_facecolor(bg_colors)
+#     elif not isinstance(bg_colors,  type(None)):
 #         x_coor = bg_colors[:,0]
 #         colors = bg_colors[:,1:]
-
 #         for i in range(len(x_coor)):
 #             if i == 0: 
 #                 end = (x_coor[i] + x_coor[i+1]) / 2
@@ -111,26 +188,26 @@ def find_nearest(array, value):
 #                 start = (x_coor[i-1] + x_coor[i]) / 2
 #                 end = (x_coor[i] + x_coor[i+1]) / 2
 #             ax.axvspan(start, end, facecolor=colors[i])
+            
 #     if not isinstance(boxes,  type(None)):
 #         for (box_start, box_end) in boxes:
 #             ax.axvspan(box_start, box_end, facecolor=box_color, edgecolor=box_color)
-    
-    
+
 #     if plot_type == 'scatter':
-#         plt.scatter(x=curve_x, y=curve_y, c='k', s=markersize)
+#         plt.scatter(x=curve_x, y=curve_y, c=plot_colors[0], s=markersize)
 #         if type(curve_y_fit) != type(None):
 #             if type(curve_x_fit) != type(None):
-#                 plt.scatter(x=curve_x_fit, y=curve_y_fit, c='r', s=markersize)
+#                 plt.scatter(x=curve_x_fit, y=curve_y_fit, c=plot_colors[1], s=markersize)
 #             else:
-#                 plt.scatter(x=curve_x, y=curve_y_fit, c='r', s=markersize)
+#                 plt.scatter(x=curve_x, y=curve_y_fit, c=plot_colors[1], s=markersize)
 
 #     if plot_type == 'lineplot':
-#         plt.plot(curve_x, curve_y, color='k', marker='.', markersize=markersize)
+#         plt.plot(curve_x, curve_y, color=plot_colors[0], marker='.', markersize=markersize)
 #         if type(curve_y_fit) != type(None):
 #             if type(curve_x_fit) != type(None):
-#                 plt.plot(curve_x_fit, curve_y_fit, color='b', marker='.', markersize=markersize)
+#                 plt.plot(curve_x_fit, curve_y_fit, color=plot_colors[1], marker='.', markersize=markersize)
 #             else:
-#                 plt.plot(curve_x, curve_y_fit, color='b', marker='.', markersize=markersize)
+#                 plt.plot(curve_x, curve_y_fit, color=plot_colors[1], marker='.', markersize=markersize)
 
 #     ax.set_xlabel(xlabel)
 #     ax.set_ylabel(ylabel)
@@ -148,65 +225,6 @@ def find_nearest(array, value):
 #     if legend: plt.legend(legend)
 #     if save_path: plt.savefig(save_path, dpi=300, bbox_inches='tight')
 #     plt.show()
-    
-    
-def plot_curve(curve_x, curve_y, curve_x_fit=None, curve_y_fit=None, plot_colors=['k', 'r'], labels_dict=None, bg_colors=None, boxes=None, box_color=None, plot_type='scatter', markersize=1, xlabel=None, ylabel=None, xlim=None, ylim=None, logscale=False, yaxis_style='sci', title=None, legend=None, figsize=(12,2.5), save_path=None):
-    
-    fig, ax = plt.subplots(1, 1, figsize=figsize)
-    
-    if isinstance(bg_colors,  tuple):
-        ax.set_facecolor(bg_colors)
-    elif not isinstance(bg_colors,  type(None)):
-        x_coor = bg_colors[:,0]
-        colors = bg_colors[:,1:]
-        for i in range(len(x_coor)):
-            if i == 0: 
-                end = (x_coor[i] + x_coor[i+1]) / 2
-                start = end - (x_coor[i+1] - x_coor[i])
-            elif i == len(x_coor) - 1: 
-                start = (x_coor[i-1] + x_coor[i]) / 2
-                end = start + (x_coor[i] - x_coor[i-1])
-            else:
-                start = (x_coor[i-1] + x_coor[i]) / 2
-                end = (x_coor[i] + x_coor[i+1]) / 2
-            ax.axvspan(start, end, facecolor=colors[i])
-            
-    if not isinstance(boxes,  type(None)):
-        for (box_start, box_end) in boxes:
-            ax.axvspan(box_start, box_end, facecolor=box_color, edgecolor=box_color)
-
-    if plot_type == 'scatter':
-        plt.scatter(x=curve_x, y=curve_y, c=plot_colors[0], s=markersize)
-        if type(curve_y_fit) != type(None):
-            if type(curve_x_fit) != type(None):
-                plt.scatter(x=curve_x_fit, y=curve_y_fit, c=plot_colors[1], s=markersize)
-            else:
-                plt.scatter(x=curve_x, y=curve_y_fit, c=plot_colors[1], s=markersize)
-
-    if plot_type == 'lineplot':
-        plt.plot(curve_x, curve_y, color=plot_colors[0], marker='.', markersize=markersize)
-        if type(curve_y_fit) != type(None):
-            if type(curve_x_fit) != type(None):
-                plt.plot(curve_x_fit, curve_y_fit, color=plot_colors[1], marker='.', markersize=markersize)
-            else:
-                plt.plot(curve_x, curve_y_fit, color=plot_colors[1], marker='.', markersize=markersize)
-
-    ax.set_xlabel(xlabel)
-    ax.set_ylabel(ylabel)
-    ax.set_title(title)
-    if type(xlim) != type(None): ax.set_xlim(xlim)
-    if type(ylim) != type(None): ax.set_ylim(ylim)
-    if yaxis_style == 'sci':
-        plt.ticklabel_format(axis='y', style='sci', scilimits=(0,0), useLocale=False)    
-    if type(labels_dict) != type(None):
-        for x in labels_dict.keys():
-            y = curve_y[np.where(curve_x==find_nearest(curve_x, x))]
-            pl.text(x, y, str(labels_dict[x]), color="g", fontsize=6)
-            
-    if logscale: plt.yscale("log") 
-    if legend: plt.legend(legend)
-    if save_path: plt.savefig(save_path, dpi=300, bbox_inches='tight')
-    plt.show()
 
     
 def show_grid_plots(xs, ys, labels=None, ys_fit1=None, ys_fit2=None, img_per_row=4, subplot_height=3, ylim=None, legend=None):

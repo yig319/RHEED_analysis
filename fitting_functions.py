@@ -5,10 +5,12 @@ from scipy.optimize import curve_fit
 from scipy.stats import zscore
 from scipy.signal import savgol_filter
 from sklearn.decomposition import PCA
+import matplotlib.pyplot as plt
 
 import sys
 sys.path.append('./')
 from visualize_functions import plot_curve, show_grid_plots
+from visualize_functions import draw_background_colors, plot_scatter, plot_lineplot, set_labels, label_curves
 
 def load_curve(h5_para_file, growth, spot, metric, camera_freq, x_start):
     h5_para = h5py.File(h5_para_file, mode='r')
@@ -276,8 +278,17 @@ def analyze_curves(h5_para_file, growth_dict, spot, metric, camera_freq=500, int
             labels_dict = {}
             for i, x in enumerate(x_peaks[:-1]):
                 labels_dict[x] = labels[i]
-            plot_curve(np.concatenate(xs), np.concatenate(ys), curve_y_fit=np.concatenate(ys_fit), labels_dict=labels_dict,
-                       plot_type='scatter', xlabel='Time (s)', ylabel='Intensity (a.u.)', figsize=(12, 4))  
+            
+            # show the fitting results
+            fig, ax = plt.subplots(1, 1, figsize=(12, 2.5))
+            plot_scatter(ax, np.concatenate(xs), np.concatenate(ys))
+            plot_scatter(ax, np.concatenate(xs), np.concatenate(ys_fit), 'r')
+            set_labels(ax, xlabel='Time (s)', ylabel='Intensity (a.u.)')
+            label_curves(ax, np.concatenate(xs), np.concatenate(ys), labels_dict=labels_dict)
+            plt.show()
+            
+#             plot_curve(np.concatenate(xs), np.concatenate(ys), curve_y_fit=np.concatenate(ys_fit), labels_dict=labels_dict,
+#                        plot_type='scatter', xlabel='Time (s)', ylabel='Intensity (a.u.)', figsize=(12, 4))  
             if fit_settings['unify'] == False:
                 losses_np = np.array(losses)
                 
@@ -285,9 +296,9 @@ def analyze_curves(h5_para_file, growth_dict, spot, metric, camera_freq=500, int
                 loss_y1 = losses_np[:,0][losses_np[:,0]>losses_np[:,1]]
                 x_y2 = x_peaks[:-1][losses_np[:,0]<losses_np[:,1]]
                 loss_y2 = losses_np[:,1][losses_np[:,0]<losses_np[:,1]]
+                
                 plot_curve(x_y1, loss_y1, curve_x_fit=x_y2, curve_y_fit=loss_y2, plot_type='scatter', ylim=(-0.005, 0.01), xlabel='Laser ablation (count)', ylabel='MSE Loss (a.u.)', yaxis_style='linear', 
                            legend=['y1=(ax+b)*(1-np.exp(-x/tau))', 'y2=(ax+b)*np.exp(-x/tau)'], figsize=(12, 4), title='Indicator for fitting function choice')
-
 
             plot_curve(x_peaks[:-1], parameters[:,0], plot_type='lineplot', xlabel='Laser ablation (count)', ylabel='Intensity Magnitude Constant (a.u.)', yaxis_style='linear', figsize=(12, 4))
             plot_curve(x_peaks[:-1], parameters[:,1], plot_type='lineplot', xlabel='Laser ablation (count)', ylabel='Intensity Magnitude Linear (a.u.)', yaxis_style='linear', figsize=(12, 4))
